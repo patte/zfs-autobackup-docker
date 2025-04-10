@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+
+sudo podman run --rm \
+  --privileged \
+  -v /dev:/dev \
+  --env SSH_AUTH_SOCK=$SSH_AUTH_SOCK \
+  -v $SSH_AUTH_SOCK:$SSH_AUTH_SOCK \
+  -v ./known_hosts:/root/.ssh/known_hosts \
+  ghcr.io/patte/zfs-autobackup:latest "$@"
