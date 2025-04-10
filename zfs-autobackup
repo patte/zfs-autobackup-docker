@@ -6,4 +6,4 @@ sudo podman run --rm \
   --env SSH_AUTH_SOCK=$SSH_AUTH_SOCK \
   -v $SSH_AUTH_SOCK:$SSH_AUTH_SOCK \
   -v ./known_hosts:/root/.ssh/known_hosts \
-  ghcr.io/patte/zfs-autobackup:latest "$@"
+  ghcr.io/patte/zfs-autobackup "$@"
