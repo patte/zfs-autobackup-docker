@@ -6,7 +6,7 @@ Features:
 - [x] SSH agent forwarding
 - [x] SSH config with 48h connection persistence
 - [x] Known hosts file, no `--strict-host-key-checking=no`
-- [x] Based on `buntu:24.04`
+- [x] Based on `ubuntu:24.04`
 - [x] GitHub Action to build (daily) and push the image to ghcr.io
 
 Image:
