@@ -8,10 +8,11 @@ Features:
 - [x] Known hosts file, no `--strict-host-key-checking=no`
 - [x] Based on `ubuntu:24.04`
 - [x] GitHub Action to build (daily) and push the image to ghcr.io
+- [ ] Version pinning for `zfs-autobackup` (currently using the latest version)
 
 Image:
 ```
-ghcr.io/patte/zfs-autobackup
+ghcr.io/patte/zfs-autobackup:main
 ```
 
 ## Usage
@@ -29,7 +30,7 @@ sudo podman run --rm \
   --env SSH_AUTH_SOCK=$SSH_AUTH_SOCK \
   -v $SSH_AUTH_SOCK:$SSH_AUTH_SOCK \
   -v ./known_hosts:/root/.ssh/known_hosts \
-  ghcr.io/patte/zfs-autobackup --help
+  ghcr.io/patte/zfs-autobackup:main --help
 ```
 
 Or just run the script [`zfs-autobackup`](./zfs-autobackup), which does the same thing.
