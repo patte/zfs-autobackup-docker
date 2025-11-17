@@ -7,7 +7,7 @@ Features:
 - [x] SSH config with 48h connection persistence
 - [x] Known hosts file, no `--strict-host-key-checking=no`
 - [x] Based on `ubuntu:24.04`
-- [x] GitHub Action to build (daily) and push the image to ghcr.io
+- [x] GitHub Action to weekly build and push the image to ghcr.io
 - [ ] Version pinning for `zfs-autobackup` (currently using the latest version)
 
 Image:
