@@ -5,6 +5,7 @@ RUN apt-get update && apt-get install -y \
   zfsutils-linux \
   python3-pip \
   pipx \
+  netcat-openbsd \
   openssh-client \
   ca-certificates \
   && apt-get clean \
