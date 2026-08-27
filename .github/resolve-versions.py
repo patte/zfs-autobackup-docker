@@ -12,9 +12,12 @@ import sys
 import urllib.error
 import urllib.request
 
+from packaging.utils import parse_sdist_filename, parse_wheel_filename
 from packaging.version import InvalidVersion, Version
 
-PYPI_URL = "https://pypi.org/pypi/zfs-autobackup/json"
+# Simple API (PEP 691/700) — the same index pip resolves against
+PYPI_URL = "https://pypi.org/simple/zfs-autobackup/"
+SIMPLE_ACCEPT = "application/vnd.pypi.simple.v1+json"
 IMAGE = os.environ.get("IMAGE_NAME", "patte/zfs-autobackup")
 
 MANIFEST_ACCEPT = ",".join(
@@ -55,15 +58,28 @@ def resolve_versions():
     `pre` is the newest release overall, so it equals `stable` when no
     pre-release is newer than the latest stable release.
     """
-    releases = fetch_json(PYPI_URL)["releases"]
-    versions = {}
-    for release, files in releases.items():
-        if not files or all(f.get("yanked") for f in files):
+    project = fetch_json(PYPI_URL, headers={"Accept": SIMPLE_ACCEPT})
+
+    # yanked is per file; a version is installable if any of its files is not
+    installable = set()
+    for file in project["files"]:
+        if file.get("yanked"):
             continue
+        name = file["filename"]
+        parse = parse_wheel_filename if name.endswith(".whl") else parse_sdist_filename
         try:
-            versions[Version(release)] = release
+            installable.add(parse(name)[1])
+        except ValueError:
+            continue
+
+    versions = {}
+    for release in project["versions"]:
+        try:
+            version = Version(release)
         except InvalidVersion:
             continue
+        if version in installable:
+            versions[version] = release
     stable = max(v for v in versions if not v.is_prerelease)
     latest = max(versions)
     return versions[stable], versions[latest]
