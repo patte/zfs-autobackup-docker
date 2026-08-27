@@ -42,7 +42,7 @@ sudo podman run --rm \
   --env SSH_AUTH_SOCK=$SSH_AUTH_SOCK \
   -v $SSH_AUTH_SOCK:$SSH_AUTH_SOCK \
   -v ./known_hosts:/root/.ssh/known_hosts \
-  ghcr.io/patte/zfs-autobackup:main --help
+  ghcr.io/patte/zfs-autobackup:latest --help
 ```
 
 Or just run the script [`zfs-autobackup`](./zfs-autobackup), which does the same thing (using podman or docker, whichever is available).
