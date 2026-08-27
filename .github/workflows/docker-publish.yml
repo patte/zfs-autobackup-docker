@@ -115,6 +115,9 @@ jobs:
             ZAB_SPEC=zfs-autobackup==${{ matrix.version }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          # The weekly run bypasses the cache: with an unchanged base digest the
+          # apt layer would be reused and security updates never picked up.
+          no-cache: ${{ github.event.schedule == '0 23 * * 0' }}
           cache-from: type=gha,scope=${{ matrix.channel }}
           cache-to: type=gha,mode=max,scope=${{ matrix.channel }}
 
