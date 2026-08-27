@@ -94,6 +94,8 @@ def main():
     stable_tags = ["latest", "main", str(Version(stable).major), stable]
     if pre == stable:
         stable_tags.append("pre")
+    # If a withdrawn pre-release makes pre fold back into stable while the
+    # stable tag already exists, :pre stays stale until the next forced run.
     if force or not tag_exists(stable):
         matrix.append({"channel": "stable", "version": stable, "tags": stable_tags})
     if pre != stable and (force or not tag_exists(pre)):
