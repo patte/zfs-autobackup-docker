@@ -18,11 +18,14 @@ ghcr.io/patte/zfs-autobackup:latest
 
 Tags:
 - `latest` (alias `main`): latest stable release of zfs-autobackup
+- `3` (etc.): latest stable release within a major version
 - `3.3` (etc.): pinned zfs-autobackup version
 - `pre`: latest pre-release (equals `latest` when no pre-release is newer than stable)
 - `4.0rc1` (etc.): pinned pre-release
 
-New releases on PyPI are picked up and published by a daily check. The current stable and pre tags are rebuilt weekly so the Ubuntu base and apt packages stay fresh; older version tags stay at their last build. When a tag moves to a new image, the old image stays pullable by digest for 90 days and is then deleted. So pinning by digest gives you an immutable image, but only for 90 days after its build.
+New releases on PyPI are picked up and published by a daily check. The current stable and pre tags are rebuilt weekly so the Ubuntu base and apt packages stay fresh; older version tags stay at their last build.
+
+When a tag moves to a new image, the old image stays pullable by digest for 90 days and is then deleted. So pinning by digest gives you an immutable image, but only for 90 days after its build.
 
 ## Usage
 
