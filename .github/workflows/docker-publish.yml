@@ -51,7 +51,7 @@ jobs:
           FORCE: ${{ github.event.schedule != '0 4 * * *' }}
         run: |
           pip install --quiet packaging
-          python3 .github/resolve-versions.py
+          python3 .github/scripts/resolve-versions.py
 
   build:
     needs: resolve
