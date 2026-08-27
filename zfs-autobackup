@@ -1,9 +1,34 @@
 #!/usr/bin/env bash
+set -euo pipefail
 
-sudo podman run --rm \
-  --privileged \
-  -v /dev:/dev \
-  --env SSH_AUTH_SOCK=$SSH_AUTH_SOCK \
-  -v $SSH_AUTH_SOCK:$SSH_AUTH_SOCK \
-  -v ./known_hosts:/root/.ssh/known_hosts \
-  ghcr.io/patte/zfs-autobackup:main "$@"
+# Prefer podman, fall back to docker
+if command -v podman >/dev/null 2>&1; then
+  engine=podman
+elif command -v docker >/dev/null 2>&1; then
+  engine=docker
+else
+  echo "error: neither podman nor docker found in PATH" >&2
+  exit 1
+fi
+
+# TAG selects the image tag: latest (default), pre, or a version like 3.3
+TAG="${TAG:-latest}"
+
+args=(
+  --rm
+  --privileged
+  -v /dev:/dev
+  -v ./known_hosts:/root/.ssh/known_hosts
+)
+
+if [[ -n "${SSH_AUTH_SOCK:-}" ]]; then
+  args+=(--env "SSH_AUTH_SOCK=$SSH_AUTH_SOCK" -v "$SSH_AUTH_SOCK:$SSH_AUTH_SOCK")
+fi
+
+# ZAB_SRC mounts a local zfs_autobackup checkout over the installed package
+# (via PYTHONPATH), so source edits apply without rebuilding the image
+if [[ -n "${ZAB_SRC:-}" ]]; then
+  args+=(-v "$ZAB_SRC:/zab-src:ro" --env PYTHONPATH=/zab-src)
+fi
+
+sudo "$engine" run "${args[@]}" "ghcr.io/patte/zfs-autobackup:$TAG" "$@"
