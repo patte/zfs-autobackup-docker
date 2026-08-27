@@ -7,6 +7,11 @@ on:
     tags: ["v*.*.*"]
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
+    inputs:
+      prune_dry_run:
+        description: "Prune: only print what would be deleted"
+        type: boolean
+        default: false
   schedule:
     # Daily: build only what's new on PyPI (no-op otherwise)
     - cron: "0 4 * * *"
@@ -16,6 +21,11 @@ on:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: patte/zfs-autobackup
+
+# Serialize runs so two publishes never race each other's tag moves or prune.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
 
 jobs:
   resolve:
@@ -124,3 +134,28 @@ jobs:
         # This step uses the identity token to provision an ephemeral certificate
         # against the sigstore community Fulcio instance.
         run: echo "${TAGS}" | xargs -I {} cosign sign --yes "{}@${DIGEST}"
+
+  # Keep every tagged release (and its children and signatures) and delete
+  # untagged leftovers older than 90 days. Also runs on daily no-op builds so
+  # strays age out on schedule; never runs after a failed build.
+  prune:
+    needs: [resolve, build]
+    if: ${{ !cancelled() && needs.build.result != 'failure' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Prune old package versions
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          OWNER: ${{ github.repository_owner }}
+          PACKAGE: zfs-autobackup
+          KEEP_AGE_DAYS: "90"
+          DRY_RUN: ${{ inputs.prune_dry_run && 'true' || 'false' }}
+        run: ./.github/scripts/prune-ghcr.sh
