@@ -3,20 +3,57 @@ name: docker-publish
 on:
   push:
     branches: ["main"]
-    # Publish semver tags as releases.
-    tags: ["v*.*.*"]
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
-  # Run every sunday at 23:00
+    inputs:
+      prune_dry_run:
+        description: "Prune: only print what would be deleted"
+        type: boolean
+        default: false
   schedule:
+    # Daily: build only what's new on PyPI (no-op otherwise)
+    - cron: "0 4 * * *"
+    # Weekly forced rebuild of both channels for base image and apt updates
     - cron: "0 23 * * 0"
 
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: patte/zfs-autobackup
 
+# Serialize runs so two publishes never race each other's tag moves or prune.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
 jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.resolve.outputs.matrix }}
+      any: ${{ steps.resolve.outputs.any }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.x"
+
+      - name: Resolve zfs-autobackup versions
+        id: resolve
+        env:
+          # Daily runs skip channels whose version is already published;
+          # everything else (weekly cron, push, dispatch) rebuilds both.
+          FORCE: ${{ github.event.schedule != '0 4 * * *' }}
+        run: |
+          pip install --quiet packaging
+          python3 .github/scripts/resolve-versions.py
+
   build:
+    needs: resolve
+    if: needs.resolve.outputs.any == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -24,6 +61,10 @@ jobs:
       # This is used to complete the identity challenge
       # with sigstore/fulcio when running outside of PRs.
       id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.resolve.outputs.matrix) }}
 
     steps:
       - name: Checkout repository
@@ -60,6 +101,7 @@ jobs:
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: ${{ matrix.tags }}
 
       # Build and push Docker image with Buildx (don't push on PR)
       # https://github.com/docker/build-push-action
@@ -69,10 +111,15 @@ jobs:
         with:
           context: .
           push: ${{ github.event_name != 'pull_request' }}
+          build-args: |
+            ZAB_SPEC=zfs-autobackup==${{ matrix.version }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # The weekly run bypasses the cache: with an unchanged base digest the
+          # apt layer would be reused and security updates never picked up.
+          no-cache: ${{ github.event.schedule == '0 23 * * 0' }}
+          cache-from: type=gha,scope=${{ matrix.channel }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.channel }}
 
       # Sign the resulting Docker image digest except on PRs.
       # This will only write to the public Rekor transparency log when the Docker
@@ -87,4 +134,29 @@ jobs:
           DIGEST: ${{ steps.build-and-push.outputs.digest }}
         # This step uses the identity token to provision an ephemeral certificate
         # against the sigstore community Fulcio instance.
-        run: echo "${TAGS}" | xargs -I {} cosign sign --yes {}@${DIGEST}
+        run: echo "${TAGS}" | xargs -I {} cosign sign --yes "{}@${DIGEST}"
+
+  # Keep every tagged release (and its children and signatures) and delete
+  # untagged leftovers older than 90 days. Also runs on daily no-op builds so
+  # strays age out on schedule; never runs after a failed build.
+  prune:
+    needs: [resolve, build]
+    if: ${{ !cancelled() && needs.build.result != 'failure' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Prune old package versions
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          OWNER: ${{ github.repository_owner }}
+          PACKAGE: zfs-autobackup
+          KEEP_AGE_DAYS: "90"
+          DRY_RUN: ${{ inputs.prune_dry_run && 'true' || 'false' }}
+        run: ./.github/scripts/prune-ghcr.sh
