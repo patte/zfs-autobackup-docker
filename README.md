@@ -7,13 +7,22 @@ Features:
 - [x] SSH config with 48h connection persistence
 - [x] Known hosts file, no `--strict-host-key-checking=no`
 - [x] Based on `ubuntu:26.04`
-- [x] GitHub Action to weekly build and push the image to ghcr.io
-- [ ] Version pinning for `zfs-autobackup` (currently using the latest version)
+- [x] GitHub Action to build and push the image to ghcr.io
+- [x] Version pinning for `zfs-autobackup`
+- [x] Pre-release channel
 
 Image:
 ```
-ghcr.io/patte/zfs-autobackup:main
+ghcr.io/patte/zfs-autobackup:latest
 ```
+
+Tags:
+- `latest` (alias `main`): latest stable release of zfs-autobackup
+- `3.3` (etc.): pinned zfs-autobackup version
+- `pre`: latest pre-release (equals `latest` when no pre-release is newer than stable)
+- `4.0rc1` (etc.): pinned pre-release
+
+New releases on PyPI are picked up and published by a daily check. All tags are rebuilt weekly so the Ubuntu base and apt packages stay fresh; pin by digest for a fully immutable image.
 
 ## Usage
 
@@ -33,9 +42,14 @@ sudo podman run --rm \
   ghcr.io/patte/zfs-autobackup:main --help
 ```
 
-Or just run the script [`zfs-autobackup`](./zfs-autobackup), which does the same thing.
+Or just run the script [`zfs-autobackup`](./zfs-autobackup), which does the same thing (using podman or docker, whichever is available).
 ```bash
 ./zfs-autobackup --version
+```
+
+To use the pre-release channel (or any published tag), set `TAG`:
+```bash
+TAG=pre ./zfs-autobackup --version
 ```
 
 ### Example
@@ -49,3 +63,18 @@ To manually build the image, run the following command:
 ```bash
 sudo podman build -t localhost/zfs-autobackup .
 ```
+
+## For zfs-autobackup developers
+
+To run a local zfs_autobackup checkout inside the container, mount it over the package installed in the container:
+```bash
+ZAB_SRC=~/src/zfs_autobackup ./zfs-autobackup --version
+```
+Changes in your local checkout are picked up on the next run, so you do not need to rebuild the image. This works as long as your checkout only uses dependencies already included in the image (currently `colorama`). If you add a new dependency, rebuild the image.
+
+To build the image from a specific branch, tag, or commit, pass a pip-installable archive URL as `ZAB_SPEC`:
+
+```bash
+sudo podman build --build-arg ZAB_SPEC=https://github.com/psy0rz/zfs_autobackup/archive/refs/heads/master.tar.gz -t localhost/zfs-autobackup .
+```
+(An archive URL avoids needing git in the image; `refs/heads/<branch>`, `refs/tags/<tag>`, or a commit SHA all work.)
