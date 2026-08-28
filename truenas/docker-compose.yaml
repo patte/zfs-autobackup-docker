@@ -1,14 +1,12 @@
-# zfs-autobackup as a TrueNAS Custom App (TrueNAS 25.04 or newer).
+# zfs-autobackup as a TrueNAS Custom App
 #
 # TrueNAS UI: Apps -> Discover Apps -> (three dots, top right) -> Install via YAML
 #   1. Adjust the settings below.
 #   2. Paste the whole file, install.
 #   3. The app logs show its ssh public key: add it to authorized_keys on the ssh target.
 #      With run_on_startup the first backup runs right away, the logs show whether it works.
-# See https://github.com/patte/zfs-autobackup-docker#truenas
 #
-# This is a standard docker compose file, it works the same way with `docker compose up -d`
-# on any host with ZFS.
+# See https://github.com/patte/zfs-autobackup-docker#truenas
 
 x-settings:
   # Name of this backup job: datasets with the ZFS property autobackup:<name>=true are
