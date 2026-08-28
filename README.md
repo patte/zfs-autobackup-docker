@@ -10,6 +10,8 @@ Features:
 - [x] GitHub Action to build and push the image to ghcr.io
 - [x] Version pinning for `zfs-autobackup`
 - [x] Pre-release channel
+- [x] Service mode: run on a cron schedule
+- [ ] TrueNAS App (in the works)
 
 Image:
 ```
@@ -34,20 +36,27 @@ First create a `known_hosts` file for the servers you want to connect to. This w
 ssh-keyscan HOST >> known_hosts
 ```
 
-Then run the container with the following command. Note that `--privileged` and `-v /dev:/dev` are required so that ZFS from inside the container can access the host's ZFS devices.
+Then run the container with the following command.
 ```bash
 sudo podman run --rm \
-  --privileged \
-  -v /dev:/dev \
+  --cap-drop ALL --cap-add SYS_ADMIN --cap-add DAC_OVERRIDE \
+  --security-opt no-new-privileges=true \
+  --device /dev/zfs \
   --env SSH_AUTH_SOCK=$SSH_AUTH_SOCK \
   -v $SSH_AUTH_SOCK:$SSH_AUTH_SOCK \
   -v ./known_hosts:/root/.ssh/known_hosts \
   ghcr.io/patte/zfs-autobackup:latest --help
 ```
+_ZFS inside the container needs `CAP_SYS_ADMIN` and `/dev/zfs`; `DAC_OVERRIDE` lets root in the container use your user's ssh-agent socket (can be dropped if you mount a key file instead)._
 
 Or just run the script [`zfs-autobackup`](./zfs-autobackup), which does the same thing (using podman or docker, whichever is available).
 ```bash
 ./zfs-autobackup --version
+```
+
+Just run `./zfs-autobackup` where you would run `zfs-autobackup` e.g.:
+```bash
+./zfs-autobackup -v --ssh-target user@HOST --strip-path=1 --keep-source=10 --keep-target=10 HOST backupPool
 ```
 
 To use the pre-release channel (or any published tag), set `TAG`:
@@ -55,17 +64,85 @@ To use the pre-release channel (or any published tag), set `TAG`:
 TAG=pre ./zfs-autobackup --version
 ```
 
-### Example
-Just run `./zfs-autobackup` where you would run `zfs-autobackup` e.g.:
-```bash
-./zfs-autobackup -v --ssh-target user@HOST --strip-path=1 --keep-source=10 --keep-target=10 HOST backupPool
+### Service mode (cron schedule)
+
+By default the container behaves like the `zfs-autobackup` binary: it runs once with the given arguments and exits.
+
+Set `CRON_SCHEDULE` to keep the container running and execute `zfs-autobackup` on that schedule e.g. for docker compose, TrueNAS or Unraid. The image is using [supercronic](https://github.com/aptible/supercronic) under the hood, so any cron expression supported by supercronic is supported here.
+
+```yaml
+services:
+  zfs-autobackup:
+    image: ghcr.io/patte/zfs-autobackup:latest
+    restart: unless-stopped
+    cap_drop: [ALL]
+    cap_add: [SYS_ADMIN]
+    security_opt: [no-new-privileges=true]
+    devices:
+      - /dev/zfs:/dev/zfs
+    volumes:
+      - ./ssh/id_ed25519:/root/.ssh/id_ed25519:ro
+      - ./ssh/known_hosts:/root/.ssh/known_hosts:ro
+    environment:
+      TZ: Europe/Zurich
+      CRON_SCHEDULE: "0 3 * * *"
+      RUN_ON_STARTUP: "true"
+    command: ["-v", "--ssh-target", "user@HOST", "--strip-path=1", "--keep-source=10", "--keep-target=10", "offsite", "backupPool/myhost"]
 ```
+
+`CAP_SYS_ADMIN` and access to `/dev/zfs` are required so that ZFS inside the container can talk to the host's ZFS kernel module.
+
+#### Configuration
+
+| Variable | Default | Effect |
+| --- | --- | --- |
+| `CRON_SCHEDULE` | unset (one-shot mode) | Cron expression; keeps the container running and executes `zfs-autobackup` on that schedule. |
+| `RUN_ON_STARTUP` | `false` | `true`: additionally run once immediately on start. |
+| `TZ` | `UTC` | Timezone for the schedule and the snapshot names. |
+| `PING_URL` | unset | healthchecks.io style monitoring pings, see below. |
+| `UNHEALTHY_AFTER_FAILURES` | `2` | Consecutive failed runs after which the healthcheck reports unhealthy. |
+
+These knobs only work in service mode (except `TZ`) as in one-shot only `zfs-autobackup` is run.
+
+#### SSH key and known_hosts
+
+No ssh agent in a long-running container, so use a dedicated key without passphrase and pin the host key:
+
+```bash
+mkdir -p ssh
+ssh-keygen -t ed25519 -N '' -C zfs-autobackup -f ssh/id_ed25519
+ssh-keyscan HOST >> ssh/known_hosts
+```
+
+Mount both read-only as in the example above. Add `ssh/id_ed25519.pub` to `~/.ssh/authorized_keys` on the target. The key has the same power there as the user it logs in as, so prefer a dedicated user with [`zfs allow` permissions](https://github.com/psy0rz/zfs_autobackup/wiki/Manual#running-without-root) over root.
+
+For ports, jump hosts etc. mount your own ssh config to `/root/.ssh/config`. Start from [`ssh.config`](./ssh.config), so the connection sharing settings stay, and add a `Host` block to it.
+
+#### Noticing failures
+
+The image offers two options to get notified when things go wrong, so failing backups get noticed.
+- `PING_URL`: [healthchecks.io](https://healthchecks.io) style monitoring (also understood by Uptime Kuma, Cronitor, ...): `$PING_URL/start` is requested before a run, `$PING_URL` after a successful and `$PING_URL/fail` (with the last log lines as body) after a failed run. The monitoring service then alerts on failures *and* on runs that don't happen at all.
+- The container's healthcheck reports unhealthy when the scheduler is gone or the last two runs in a row failed (`UNHEALTHY_AFTER_FAILURES` to change the count), visible in `docker ps` and in platforms that display container health.
+
+Also see [Monitoring](https://github.com/psy0rz/zfs_autobackup/wiki/Monitoring) in the zfs_autobackup wiki for more options.
+
+#### TrueNAS
+
+A TrueNAS app (community train) that uses this image in service mode and exposes the common options in the TrueNAS UI is in the works. This README will be updated when it is available.
 
 ## Build
 To manually build the image, run the following command:
 ```bash
 sudo podman build -t localhost/zfs-autobackup .
 ```
+
+## Tests
+CI builds the image and runs it on every pull request and before publishing.
+```bash
+docker build -t zfs-autobackup:test . && sudo tests/integration.sh zfs-autobackup:test
+```
+
+`tests/integration.sh IMAGE` runs the image against a file-backed pool and the local sshd (needs root, docker, zfs and sshd) and checks the one-shot usage, the wrapper script and service mode including pings and the healthcheck.
 
 ## For zfs-autobackup developers
 

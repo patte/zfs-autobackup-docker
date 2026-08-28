@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Prefer podman, fall back to docker
-if command -v podman >/dev/null 2>&1; then
+# Prefer podman, fall back to docker; ENGINE overrides the choice
+if [[ -n "${ENGINE:-}" ]]; then
+  engine=$ENGINE
+elif command -v podman >/dev/null 2>&1; then
   engine=podman
 elif command -v docker >/dev/null 2>&1; then
   engine=docker
@@ -11,13 +13,16 @@ else
   exit 1
 fi
 
-# TAG selects the image tag: latest (default), pre, or a version like 3.3
+# TAG selects the image tag: latest (default), pre, or a version like 3.3;
+# IMAGE overrides the whole image reference (e.g. a locally built image)
 TAG="${TAG:-latest}"
+IMAGE="${IMAGE:-ghcr.io/patte/zfs-autobackup:$TAG}"
 
 args=(
   --rm
-  --privileged
-  -v /dev:/dev
+  --cap-drop ALL --cap-add SYS_ADMIN --cap-add DAC_OVERRIDE
+  --security-opt no-new-privileges=true
+  --device /dev/zfs
   -v ./known_hosts:/root/.ssh/known_hosts
 )
 
@@ -31,4 +36,6 @@ if [[ -n "${ZAB_SRC:-}" ]]; then
   args+=(-v "$ZAB_SRC:/zab-src:ro" --env PYTHONPATH=/zab-src)
 fi
 
-sudo "$engine" run "${args[@]}" "ghcr.io/patte/zfs-autobackup:$TAG" "$@"
+# DOCKER_ARGS: extra arguments for the container engine (word split)
+# shellcheck disable=SC2086
+sudo "$engine" run "${args[@]}" ${DOCKER_ARGS:-} "$IMAGE" "$@"

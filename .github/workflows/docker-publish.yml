@@ -26,6 +26,9 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  test:
+    uses: ./.github/workflows/test.yml
+
   resolve:
     runs-on: ubuntu-latest
     outputs:
@@ -52,7 +55,7 @@ jobs:
           python3 .github/scripts/resolve-versions.py
 
   build:
-    needs: resolve
+    needs: [test, resolve]
     if: needs.resolve.outputs.any == 'true'
     runs-on: ubuntu-latest
     permissions:
@@ -140,8 +143,8 @@ jobs:
   # untagged leftovers older than 90 days. Also runs on daily no-op builds so
   # strays age out on schedule; never runs after a failed build.
   prune:
-    needs: [resolve, build]
-    if: ${{ !cancelled() && needs.build.result != 'failure' }}
+    needs: [test, resolve, build]
+    if: ${{ !cancelled() && needs.test.result == 'success' && needs.build.result != 'failure' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
