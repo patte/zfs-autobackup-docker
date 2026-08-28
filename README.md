@@ -146,7 +146,7 @@ The compose file is a normal one, it also works with `docker compose up -d` on o
 We [proposed this as an app for the TrueNAS catalog](https://github.com/truenas/apps/pull/5685); it was declined because it accesses ZFS directly without coordination with the TrueNAS middleware.
 
 What "without coordination" means in practice (tested on 25.04):
-- The app runs as root with `CAP_SYS_ADMIN` on `/dev/zfs`: full control over all pools.
+- The app runs as root with `CAP_SYS_ADMIN` on `/dev/zfs`: full control over all datasets.
 - zfs-autobackup's snapshots show up in the UI like any other
 - Periodic snapshot tasks by TrueNAS on the same datasets are fine, each tool only thins its own naming scheme.
 - The newest zfs-autobackup snapshot on each side carries a hold to protect the last common snapshot between the source and target; deleting it in the UI fails with "dataset is busy".
