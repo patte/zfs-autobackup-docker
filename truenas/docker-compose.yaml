@@ -16,6 +16,7 @@ x-settings:
   # on every start, never unset (zfs inherit autobackup:<name> <dataset> to remove one).
   datasets: &datasets tank/photos,tank/documents
   # Where the backups go: user@host of the ssh target and the dataset to receive under.
+  # The target dataset has to exist already, zfs-autobackup does not create it.
   ssh_target: &ssh_target user@backup.example.com
   target_path: &target_path backup/truenas
   # Dataset (mountpoint) on this TrueNAS for the app's state: ssh key, known_hosts, ssh config.
