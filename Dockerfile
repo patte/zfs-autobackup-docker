@@ -37,15 +37,9 @@ RUN pipx install "$ZAB_SPEC"
 # Set the PATH so pipx-installed apps are found
 ENV PATH="/root/.local/bin:$PATH"
 
-# Create SSH config to keep connections alive and reuse connection
-RUN mkdir -p /root/.ssh && \
-  echo "Host *" > /root/.ssh/config && \
-  echo "    ServerAliveInterval 60" >> /root/.ssh/config && \
-  echo "    ServerAliveCountMax 15" >> /root/.ssh/config && \
-  echo "    ControlMaster auto" >> /root/.ssh/config && \
-  echo "    ControlPath /root/.ssh/cm-%r@%h:%p" >> /root/.ssh/config && \
-  echo "    ControlPersist 48h" >> /root/.ssh/config && \
-  chmod 600 /root/.ssh/config
+# SSH config: keep connections alive and reuse one connection (see ssh.config)
+COPY ssh.config /root/.ssh/config
+RUN chmod 600 /root/.ssh/config
 
 COPY entrypoint.sh service-run.sh healthcheck.sh /
 RUN chmod +x /entrypoint.sh /service-run.sh /healthcheck.sh
