@@ -127,6 +127,7 @@ configs:
       done
       touch "$$d/known_hosts"
 
+      # Connection sharing settings: keep in sync with ssh.config in the repository root
       {
         echo "Host *"
         echo "    ServerAliveInterval 60"
