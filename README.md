@@ -141,7 +141,18 @@ The compose file defines a single service with two containers:
 
 The compose file is a normal one, it also works with `docker compose up -d` on other hosts with ZFS.
 
+##### Caveats
+
 We [proposed this as an app for the TrueNAS catalog](https://github.com/truenas/apps/pull/5685); it was declined because it accesses ZFS directly without coordination with the TrueNAS middleware.
+
+What "without coordination" means in practice (tested on 25.04):
+- The app runs as root with `CAP_SYS_ADMIN` on `/dev/zfs`: full control over all pools.
+- zfs-autobackup's snapshots show up in the UI like any other
+- Periodic snapshot tasks by TrueNAS on the same datasets are fine, each tool only thins its own naming scheme.
+- The newest zfs-autobackup snapshot on each side carries a hold to protect the last common snapshot between the source and target; deleting it in the UI fails with "dataset is busy".
+- The compose file passes `--exclude-received`, which tells zfs-autobackup to ignore datasets where the `autobackup:` property was received and only use the ones where it was set locally. The reason: when ZFS replicates a dataset it copies its properties too, including `autobackup:<name>=true`. A copy that a TrueNAS replication task makes of a dataset you selected for zfs-autobackup (e.g. `tank/photos` → `backuppool/photos`) would otherwise be marked for backup as well; zfs-autobackup would snapshot and hold the copy, and the TrueNAS replication task that owns it would fail on its next run with "dataset is busy". The same would happen when another machine running zfs-autobackup with the same backup name is replicated into this TrueNAS. With the flag, both cases just work.
+
+**Removing the app** leaves the snapshots, the `autobackup:<name>` property and the hold on the newest snapshot behind. To clean up on the TrueNAS shell: `sudo zfs inherit -r autobackup:<name> <dataset>`, `sudo zfs release zfs_autobackup:<name> <dataset>@<snapshot>` for the held snapshot (`zfs holds -r <dataset>` lists them), then delete the snapshots in the UI; same on the target.
 
 ##### Using your own ssh key
 
@@ -165,7 +176,9 @@ and set `STRICT_HOST_KEY_CHECKING: "yes"` in the compose file.
 
 <details>
 <summary>
-Alternatively, run the one-shot container from a TrueNAS cron job
+
+##### Alternatively, run the one-shot container from a TrueNAS cron job
+
 </summary>
 
 *System → Advanced Settings → Cron Jobs → Add*
