@@ -38,7 +38,6 @@ RUN pipx install "$ZAB_SPEC"
 ENV PATH="/root/.local/bin:$PATH"
 
 # Create SSH config to keep connections alive and reuse connection
-# (the entrypoint regenerates this file on start, see entrypoint.sh)
 RUN mkdir -p /root/.ssh && \
   echo "Host *" > /root/.ssh/config && \
   echo "    ServerAliveInterval 60" >> /root/.ssh/config && \
