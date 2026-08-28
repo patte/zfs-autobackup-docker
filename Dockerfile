@@ -48,8 +48,8 @@ RUN mkdir -p /root/.ssh && \
   echo "    ControlPersist 48h" >> /root/.ssh/config && \
   chmod 600 /root/.ssh/config
 
-COPY entrypoint.sh healthcheck.sh /
-RUN chmod +x /entrypoint.sh /healthcheck.sh
+COPY entrypoint.sh service-run.sh healthcheck.sh /
+RUN chmod +x /entrypoint.sh /service-run.sh /healthcheck.sh
 
 # Reports unhealthy in service mode when the scheduler died or the last runs failed
 HEALTHCHECK --interval=60s --timeout=10s --start-period=30s --retries=1 CMD ["/healthcheck.sh"]
