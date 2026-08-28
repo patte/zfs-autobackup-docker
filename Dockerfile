@@ -8,6 +8,7 @@ RUN apt-get update && apt-get install -y \
   pipx \
   netcat-openbsd \
   openssh-client \
+  procps \
   ca-certificates \
   curl \
   tzdata \
