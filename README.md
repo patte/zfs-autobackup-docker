@@ -128,11 +128,10 @@ Also see [Monitoring](https://github.com/psy0rz/zfs_autobackup/wiki/Monitoring) 
 
 #### TrueNAS
 
-zfs-autobackup runs on TrueNAS (24.10 or newer, tested on 25.10) as a *Custom App* with the compose file [`truenas/docker-compose.yaml`](./truenas/docker-compose.yaml):
+zfs-autobackup runs on TrueNAS (24.10 or newer, tested on 25.04, 25.10) as a *Custom App* with the compose file [`truenas/docker-compose.yaml`](./truenas/docker-compose.yaml):
 
+0. The dataset the backups are received under needs to exist on the ssh target already, zfs-autobackup does not create it: `zfs create -p backup/truenas` there
 1. Create a dataset for the app's state (ssh key, known_hosts), e.g. `tank/apps/zfs-autobackup`.
-   The dataset the backups are received under has to exist on the ssh target too, zfs-autobackup
-   does not create it (`zfs create -p backup/truenas` there).
 2. Adjust the settings block at the top of the compose file: backup name, datasets to back up, ssh target and target dataset, the config dataset from step 1, schedule and timezone.
 3. Apps → Discover Apps → ⋮ (top right) → *Install via YAML*, paste the file, install.
 4. On the first start the app generates an ssh key and prints the public key in the logs ("View logs" of `zfs-autobackup-init`); the first backup run fails because the target doesn't trust it yet. Add it to `authorized_keys` on the target, then restart the app: the backup runs again immediately and the logs show whether it works. See [Using your own ssh key](#using-your-own-ssh-key) if you want to provide a key yourself.
@@ -147,7 +146,7 @@ The compose file is a normal one, it also works with `docker compose up -d` on o
 
 We [proposed this as an app for the TrueNAS catalog](https://github.com/truenas/apps/pull/5685); it was declined because it accesses ZFS directly without coordination with the TrueNAS middleware.
 
-What "without coordination" means in practice (tested on 25.10):
+What "without coordination" means in practice (tested on 25.04, 25.10):
 - The app runs as root with `CAP_SYS_ADMIN` on `/dev/zfs`: full control over all datasets.
 - zfs-autobackup's snapshots show up in the UI like any other
 - Periodic snapshot tasks by TrueNAS on the same datasets are fine, each tool only thins its own naming scheme.
