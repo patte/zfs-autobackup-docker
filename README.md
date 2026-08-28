@@ -133,7 +133,7 @@ zfs-autobackup runs on TrueNAS (24.10 or newer, tested on 25.04) as a *Custom Ap
 1. Create a dataset for the app's state (ssh key, known_hosts), e.g. `tank/apps/zfs-autobackup`.
 2. Adjust the settings block at the top of the compose file: backup name, datasets to back up, ssh target and target dataset, the config dataset from step 1, schedule and timezone.
 3. Apps → Discover Apps → ⋮ (top right) → *Install via YAML*, paste the file, install.
-4. The app logs show the generated ssh public key; add it to `authorized_keys` on the ssh target. The first backup runs right away, so the logs show whether the connection and the replication work.
+4. On the first start the app generates an ssh key and prints the public key in the logs ("View logs" of `zfs-autobackup-init`); the first backup run fails because the target doesn't trust it yet. Add it to `authorized_keys` on the target, then restart the app: the backup runs again immediately and the logs show whether it works. See [Using your own ssh key](#using-your-own-ssh-key) if you want to provide a key yourself.
 
 The compose file defines a single service with two containers:
 - an init container prepares the config dataset on every start: ssh key, ssh config with host key pinning, the `autobackup:<name>` property on the selected datasets, an ssh connection check.
@@ -142,6 +142,26 @@ The compose file defines a single service with two containers:
 The compose file is a normal one, it also works with `docker compose up -d` on other hosts with ZFS.
 
 We [proposed this as an app for the TrueNAS catalog](https://github.com/truenas/apps/pull/5685); it was declined because it accesses ZFS directly without coordination with the TrueNAS middleware.
+
+##### Using your own ssh key
+
+The init container only generates a key when `<config dataset>/ssh/` contains no id_* file, so you can provide one yourself before the first start (or replace the generated one later). E.g.
+
+```bash
+sudo mkdir -p /mnt/tank/apps/zfs-autobackup/ssh
+sudo cp id_ed25519 /mnt/tank/apps/zfs-autobackup/ssh/   # private key, no passphrase
+```
+
+or copy the file in via an SMB/NFS share of that dataset. Ownership and permissions don't matter, the init container sets them (root, 0600). Any `id_*` file works (id_ed25519, id_rsa, …); with several, all are offered to the target. A keypair from Credentials → Backup Credentials → SSH Keypairs can be used the same way by pasting its private key into the file. Restart the app afterwards.
+
+The same directory holds `known_hosts`. By default the target's host key is accepted on the first connection and pinned from then on. To pin it beforehand, put it there yourself and switch to strict checking:
+
+```bash
+ssh-keyscan backup.example.com | sudo tee -a /mnt/tank/apps/zfs-autobackup/ssh/known_hosts
+```
+
+and set `STRICT_HOST_KEY_CHECKING: "yes"` in the compose file.
+
 
 <details>
 <summary>
