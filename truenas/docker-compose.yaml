@@ -94,6 +94,9 @@ services:
       - --ssh-config
       - /config/ssh/config
       - -v
+      # Skip datasets that were received by a TrueNAS replication task (they inherit the
+      # autobackup property from their source, backing them up again breaks that replication).
+      - --exclude-received
       - --ssh-target
       - *ssh_target
       - --strip-path

@@ -141,6 +141,14 @@ The compose file defines a single service with two containers:
 
 The compose file is a normal one, it also works with `docker compose up -d` on other hosts with ZFS.
 
+Coexistence with TrueNAS's own tasks (tested on 25.04): the zfs-autobackup snapshots show up in the UI like any
+other; periodic snapshot tasks on the same datasets are fine, each tool only thins its own naming scheme.
+TrueNAS replication tasks keep working because the compose file passes `--exclude-received`: without it,
+zfs-autobackup would also back up the datasets a TrueNAS replication writes (the `autobackup:` property travels
+with them) and the next replication fails with "dataset is busy". The newest zfs-autobackup snapshot carries a
+hold, so deleting it in the UI fails with the same message. TrueNAS does not know about these snapshots
+otherwise, don't expect its replication or snapshot task screens to account for them.
+
 We [proposed this as an app for the TrueNAS catalog](https://github.com/truenas/apps/pull/5685); it was declined because it accesses ZFS directly without coordination with the TrueNAS middleware.
 
 ##### Using your own ssh key
