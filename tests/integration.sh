@@ -102,7 +102,7 @@ check "local backup created a snapshot on the replica" test -n "$(last_snapshot 
 echo "### one-shot mode via wrapper script with ssh agent and mounted known_hosts"
 eval "$(ssh-agent -s)" >/dev/null; ssh-add "$key" 2>/dev/null
 write
-( cd "$tmp" && IMAGE="$image" DOCKER_ARGS="--add-host $gw:host-gateway" \
+( cd "$tmp" && ENGINE=docker IMAGE="$image" DOCKER_ARGS="--add-host $gw:host-gateway" \
   "$repo/zfs-autobackup" -v --ssh-target "root@$gw" --strip-path=1 --exclude-received zabtest "$pool/sshreplica" ) >"$tmp/wrapper.log" 2>&1
 check_log "wrapper: backup over ssh" "$tmp/wrapper.log" "All operations completed successfully"
 check "wrapper: snapshot arrived on the ssh target" test -n "$(last_snapshot "$pool/sshreplica/src")"

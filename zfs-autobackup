@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Prefer podman, fall back to docker
-if command -v podman >/dev/null 2>&1; then
+# Prefer podman, fall back to docker; ENGINE overrides the choice
+if [[ -n "${ENGINE:-}" ]]; then
+  engine=$ENGINE
+elif command -v podman >/dev/null 2>&1; then
   engine=podman
 elif command -v docker >/dev/null 2>&1; then
   engine=docker
