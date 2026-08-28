@@ -24,6 +24,12 @@ x-settings:
   # When to run (cron expression) and in which timezone.
   schedule: &schedule "0 3 * * *"
   timezone: &timezone Europe/Zurich
+  # Thinning: keep the last 10 snapshots, then 1 per day for a week, 1 per week for a month,
+  # 1 per month for a year. See https://github.com/psy0rz/zfs_autobackup/wiki/Thinner
+  keep_source: &keep_source 10,1d1w,1w1m,1m1y
+  keep_target: &keep_target 10,1d1w,1w1m,1m1y
+  # Optional: healthchecks.io style monitoring URL, alerts on failed and on missing runs.
+  ping_url: &ping_url ""
 
 services:
   # Prepares the config dataset before every start: ssh key (generated once), ssh config with
@@ -78,8 +84,7 @@ services:
       CRON_SCHEDULE: *schedule
       # Also run once when the app starts.
       RUN_ON_STARTUP: "true"
-      # Optional: healthchecks.io style monitoring, alerts on failed and on missing runs.
-      # PING_URL: https://hc-ping.com/your-uuid
+      PING_URL: *ping_url
     volumes:
       - type: bind
         source: *config_dir
@@ -93,12 +98,10 @@ services:
       - *ssh_target
       - --strip-path
       - "1"
-      # Thinning: keep the last 10 snapshots, then 1 per day for a week, 1 per week for a
-      # month, 1 per month for a year.
       - --keep-source
-      - 10,1d1w,1w1m,1m1y
+      - *keep_source
       - --keep-target
-      - 10,1d1w,1w1m,1m1y
+      - *keep_target
       - *backup_name
       - *target_path
 
