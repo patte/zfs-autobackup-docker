@@ -116,6 +116,14 @@ To manually build the image, run the following command:
 sudo podman build -t localhost/zfs-autobackup .
 ```
 
+## Tests
+`tests/integration.sh IMAGE` runs the image against a file-backed pool and the local sshd (needs root,
+docker, zfs and sshd) and checks the one-shot usage, the wrapper script and service mode including pings and
+the healthcheck. CI builds the image and runs it on every pull request and before publishing.
+```bash
+docker build -t zfs-autobackup:test . && sudo tests/integration.sh zfs-autobackup:test
+```
+
 ## For zfs-autobackup developers
 
 To run a local zfs_autobackup checkout inside the container, mount it over the package installed in the container:
