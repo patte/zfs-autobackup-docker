@@ -19,6 +19,9 @@ jobs:
           sudo systemctl start ssh
           zfs version
 
+      - name: Validate TrueNAS compose file
+        run: docker compose -f truenas/docker-compose.yaml config --quiet
+
       - name: Build image
         run: docker build -t zfs-autobackup:test .
 

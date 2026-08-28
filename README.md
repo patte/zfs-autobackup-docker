@@ -11,7 +11,7 @@ Features:
 - [x] Version pinning for `zfs-autobackup`
 - [x] Pre-release channel
 - [x] Service mode: run on a cron schedule
-- [ ] TrueNAS App (in the works)
+- [x] TrueNAS: compose file for a Custom App
 
 Image:
 ```
@@ -128,7 +128,39 @@ Also see [Monitoring](https://github.com/psy0rz/zfs_autobackup/wiki/Monitoring) 
 
 #### TrueNAS
 
-A TrueNAS app (community train) that uses this image in service mode and exposes the common options in the TrueNAS UI is in the works. This README will be updated when it is available.
+zfs-autobackup runs on TrueNAS (24.10 or newer, tested on 25.04) as a *Custom App* with the compose file [`truenas/docker-compose.yaml`](./truenas/docker-compose.yaml):
+
+1. Create a dataset for the app's state (ssh key, known_hosts), e.g. `tank/apps/zfs-autobackup`.
+2. Adjust the settings block at the top of the compose file: backup name, datasets to back up, ssh target and target dataset, the config dataset from step 1, schedule and timezone.
+3. Apps → Discover Apps → ⋮ (top right) → *Install via YAML*, paste the file, install.
+4. The app logs show the generated ssh public key; add it to `authorized_keys` on the ssh target. The first backup runs right away, so the logs show whether the connection and the replication work.
+
+The compose file defines a single service with two containers:
+- an init container prepares the config dataset on every start: ssh key, ssh config with host key pinning, the `autobackup:<name>` property on the selected datasets, an ssh connection check.
+- the main container runs `zfs-autobackup` on the schedule. After two failed runs in a row the app shows as *Deploying* instead of *Running*; set `PING_URL` in the compose file to get notified.
+
+The compose file is a normal one, it also works with `docker compose up -d` on other hosts with ZFS.
+
+We [proposed this as an app for the TrueNAS catalog](https://github.com/truenas/apps/pull/5685); it was declined because it accesses ZFS directly without coordination with the TrueNAS middleware.
+
+<details>
+<summary>
+Alternatively, run the one-shot container from a TrueNAS cron job
+</summary>
+
+*System → Advanced Settings → Cron Jobs → Add*
+
+Run As User: `root`
+
+Command:
+
+```bash
+docker run --rm --cap-drop ALL --cap-add SYS_ADMIN --security-opt no-new-privileges=true --device /dev/zfs \
+  -v /mnt/tank/apps/zfs-autobackup/ssh/id_ed25519:/root/.ssh/id_ed25519:ro \
+  -v /mnt/tank/apps/zfs-autobackup/ssh/known_hosts:/root/.ssh/known_hosts:ro \
+  ghcr.io/patte/zfs-autobackup:3 -v --ssh-target user@HOST --strip-path=1 offsite backupPool/truenas
+```
+</details>
 
 ## Build
 To manually build the image, run the following command:
