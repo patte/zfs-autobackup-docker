@@ -141,15 +141,18 @@ The compose file defines a single service with two containers:
 
 The compose file is a normal one, it also works with `docker compose up -d` on other hosts with ZFS.
 
-Coexistence with TrueNAS's own tasks (tested on 25.04): the zfs-autobackup snapshots show up in the UI like any
-other; periodic snapshot tasks on the same datasets are fine, each tool only thins its own naming scheme.
-TrueNAS replication tasks keep working because the compose file passes `--exclude-received`: without it,
-zfs-autobackup would also back up the datasets a TrueNAS replication writes (the `autobackup:` property travels
-with them) and the next replication fails with "dataset is busy". The newest zfs-autobackup snapshot carries a
-hold, so deleting it in the UI fails with the same message. TrueNAS does not know about these snapshots
-otherwise, don't expect its replication or snapshot task screens to account for them.
-
 We [proposed this as an app for the TrueNAS catalog](https://github.com/truenas/apps/pull/5685); it was declined because it accesses ZFS directly without coordination with the TrueNAS middleware.
+
+##### Caveats
+
+What "without coordination" means in practice (tested on 25.04):
+- The app runs as root with `CAP_SYS_ADMIN` on `/dev/zfs`: full control over all pools. Keep the config dataset and the compose file to yourself.
+- zfs-autobackup's snapshots show up in the UI like any other, but TrueNAS's snapshot and replication task screens don't account for them.
+- Periodic snapshot tasks on the same datasets are fine, each tool only thins its own naming scheme.
+- Replication tasks keep working because the compose file passes `--exclude-received`; without it zfs-autobackup would also back up the datasets a TrueNAS replication writes (the `autobackup:` property travels with them) and the next replication fails with "dataset is busy".
+- The newest zfs-autobackup snapshot on each side carries a hold; deleting it in the UI fails with "dataset is busy". `--no-holds` avoids that, at the cost of nothing protecting the last common snapshot.
+
+**Removing the app** leaves the snapshots, the `autobackup:<name>` property and the hold on the newest snapshot behind. To clean up on the TrueNAS shell: `sudo zfs inherit -r autobackup:<name> <dataset>`, `sudo zfs release zfs_autobackup:<name> <dataset>@<snapshot>` for the held snapshot (`zfs holds -r <dataset>` lists them), then delete the snapshots in the UI; same on the target.
 
 ##### Using your own ssh key
 
