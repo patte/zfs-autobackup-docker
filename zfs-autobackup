@@ -20,8 +20,9 @@ IMAGE="${IMAGE:-ghcr.io/patte/zfs-autobackup:$TAG}"
 
 args=(
   --rm
-  --privileged
-  -v /dev:/dev
+  --cap-drop ALL --cap-add SYS_ADMIN --cap-add DAC_OVERRIDE
+  --security-opt no-new-privileges=true
+  --device /dev/zfs
   -v ./known_hosts:/root/.ssh/known_hosts
 )
 

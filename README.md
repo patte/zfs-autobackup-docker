@@ -35,16 +35,18 @@ First create a `known_hosts` file for the servers you want to connect to. This w
 ssh-keyscan HOST >> known_hosts
 ```
 
-Then run the container with the following command. Note that `--privileged` and `-v /dev:/dev` are required so that ZFS from inside the container can access the host's ZFS devices.
+Then run the container with the following command.
 ```bash
 sudo podman run --rm \
-  --privileged \
-  -v /dev:/dev \
+  --cap-drop ALL --cap-add SYS_ADMIN --cap-add DAC_OVERRIDE \
+  --security-opt no-new-privileges=true \
+  --device /dev/zfs \
   --env SSH_AUTH_SOCK=$SSH_AUTH_SOCK \
   -v $SSH_AUTH_SOCK:$SSH_AUTH_SOCK \
   -v ./known_hosts:/root/.ssh/known_hosts \
   ghcr.io/patte/zfs-autobackup:latest --help
 ```
+_ZFS inside the container needs `CAP_SYS_ADMIN` and `/dev/zfs`; `DAC_OVERRIDE` lets root in the container use your user's ssh-agent socket (can be dropped if you mount a key file instead)._
 
 Or just run the script [`zfs-autobackup`](./zfs-autobackup), which does the same thing (using podman or docker, whichever is available).
 ```bash
