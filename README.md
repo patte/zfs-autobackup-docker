@@ -93,6 +93,15 @@ The ssh key and `known_hosts` are mounted like in the one-shot usage above; ther
 long-running container, so a dedicated key without passphrase is the usual choice. `TZ` sets the timezone
 for the schedule and the snapshot names.
 
+Noticing failures: a failed run only shows up in the logs, so two things help to get notified:
+- `PING_URL`: [healthchecks.io](https://healthchecks.io) style monitoring (also understood by Uptime Kuma,
+  Cronitor, ...): `$PING_URL/start` is requested before a run, `$PING_URL` after a successful and
+  `$PING_URL/fail` (with the last log lines as body) after a failed run. The monitoring service then alerts
+  on failures *and* on runs that don't happen at all.
+- The container's healthcheck reports unhealthy when the scheduler is gone or the last two runs in a row
+  failed (`UNHEALTHY_AFTER_FAILURES` to change the count), visible in `docker ps` and in platforms that
+  display container health.
+
 Only `CAP_SYS_ADMIN` and access to `/dev/zfs` are needed for snapshots and send/receive; `--privileged` and
 `/dev` are only required for `zpool` operations.
 
