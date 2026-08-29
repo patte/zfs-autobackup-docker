@@ -124,6 +124,19 @@ check "quiet when the userland is older than the host module" test 0 -eq "$(grep
 out=$(zfs_stub "'exit 1'")
 check "runs anyway when zfs version is unavailable" grep -q "zfs-autobackup v" <<<"$out"
 
+# and against the real module, so the parser is exercised on actual zfs version output
+host_kmod=$(zfs version | sed -n '2s/^zfs-kmod-\([0-9]\+\.[0-9]\+\).*/\1/p')
+img_userland=$(docker run --rm "${flags[@]}" --entrypoint zfs "$image" version | sed -n '1s/^zfs-\([0-9]\+\.[0-9]\+\).*/\1/p')
+out=$(docker run --rm "${flags[@]}" --entrypoint /bin/bash "$image" -c "/entrypoint.sh --version" 2>&1)
+if [[ -n $host_kmod && -n $img_userland && $img_userland != "$host_kmod" ]] &&
+   [[ $(printf '%s\n%s\n' "$img_userland" "$host_kmod" | sort -V | tail -1) == "$img_userland" ]]; then
+  check "warns against the real host module (userland $img_userland > module $host_kmod)" \
+    grep -q "warning: zfs userland" <<<"$out"
+else
+  check "quiet against the real host module (userland $img_userland, module $host_kmod)" \
+    test 0 -eq "$(grep -c 'warning: zfs userland' <<<"$out")"
+fi
+
 # --- service mode ------------------------------------------------------------------
 echo "### service mode"
 container_rm zab-args
