@@ -208,7 +208,7 @@ For this reason, the image deliberately uses a ZFS userland version that is no n
 
 | OS | OpenZFS |
 | --- | --- |
-| **`debian:trixie-slim`** (this image) | **2.3.9** |
+| **`debian:trixie-slim`** (this image) | **2.3.x** |
 | Debian 12 (bookworm) | 2.1.11 |
 | Ubuntu 26.04 LTS | 2.4.1 |
 | Ubuntu 24.04 LTS | 2.2.2 |
@@ -217,7 +217,7 @@ For this reason, the image deliberately uses a ZFS userland version that is no n
 
 The entrypoint compares both versions on startup and warns if the container userland is newer than the host module.
 
-Debian keeps its ZFS version fixed for the lifetime of a release, so weekly image rebuilds pick up security updates without unexpectedly changing the ZFS userland.
+Debian stays on the same OpenZFS release line for the lifetime of a release, so weekly image rebuilds pick up point and security updates without unexpectedly changing the ZFS userland.
 
 One minor limitation of older userland is that `zfs send -p` cannot send properties it does not know. For example, on an OpenZFS 2.4 host this image omits `defaultuserquota` and `defaultgroupquota`. File data is unaffected, and user properties such as `autobackup:<name>` are always sent.
 
