@@ -142,19 +142,6 @@ The compose file defines a single service with two containers:
 
 The compose file is a normal one, it also works with `docker compose up -d` on other hosts with ZFS.
 
-##### Caveats
-
-We [proposed this as an app for the TrueNAS catalog](https://github.com/truenas/apps/pull/5685); it was declined because it accesses ZFS directly without coordination with the TrueNAS middleware.
-
-What "without coordination" means in practice (tested on 25.04, 25.10):
-- The app runs as root with `CAP_SYS_ADMIN` on `/dev/zfs`: full control over all datasets.
-- zfs-autobackup's snapshots show up in the UI like any other
-- Periodic snapshot tasks by TrueNAS on the same datasets are fine, each tool only thins its own naming scheme.
-- The newest zfs-autobackup snapshot on each side carries a hold to protect the last common snapshot between the source and target; deleting it in the UI fails with "dataset is busy".
-- The compose file passes `--exclude-received`, which tells zfs-autobackup to ignore datasets where the `autobackup:` property was received and only use the ones where it was set locally. The reason: when ZFS replicates a dataset it copies its properties too, including `autobackup:<name>=true`. A copy that a TrueNAS replication task makes of a dataset you selected for zfs-autobackup (e.g. `tank/photos` → `backuppool/photos`) would otherwise be marked for backup as well; zfs-autobackup would snapshot and hold the copy, and the TrueNAS replication task that owns it can then fail with "dataset is busy" as soon as it has to remove a snapshot that is held (its retention pruning the copy, or a rollback before an incremental receive). The same would happen when another machine running zfs-autobackup with the same backup name is replicated into this TrueNAS. With the flag, both cases just work.
-
-**Removing the app** leaves the snapshots, the `autobackup:<name>` property and the hold on the newest snapshot behind. To clean up on the TrueNAS shell: `sudo zfs inherit -r autobackup:<name> <dataset>`, `sudo zfs release zfs_autobackup:<name> <dataset>@<snapshot>` for the held snapshot (`zfs list -t snapshot -H -o name -r <dataset> | xargs zfs holds` lists them), then delete the snapshots in the UI; same on the target.
-
 ##### Using your own ssh key
 
 The init container only generates a key when `<config dataset>/ssh/` contains no id_* file, so you can provide one yourself before the first start (or replace the generated one later). E.g.
@@ -173,6 +160,28 @@ ssh-keyscan backup.example.com | sudo tee -a /mnt/tank/apps/zfs-autobackup/ssh/k
 ```
 
 and set `STRICT_HOST_KEY_CHECKING: "yes"` in the compose file.
+
+##### Removing the app
+
+If you delete the app it leaves the snapshots, the `autobackup:<name>` property and the hold on the newest snapshot behind. To clean up on the TrueNAS shell: `sudo zfs inherit -r autobackup:<name> <dataset>`, `sudo zfs release zfs_autobackup:<name> <dataset>@<snapshot>` for the held snapshot (`zfs list -t snapshot -H -o name -r <dataset> | xargs zfs holds` lists them), then delete the snapshots in the UI; same on the target.
+
+
+<details>
+<summary>
+
+##### Caveats
+
+</summary>
+
+We [proposed this as an app for the TrueNAS catalog](https://github.com/truenas/apps/pull/5685); it was declined because it accesses ZFS directly without coordination with the TrueNAS middleware.
+
+What "without coordination" means in practice (tested on 25.04, 25.10):
+- The app runs as root with `CAP_SYS_ADMIN` on `/dev/zfs`: full control over all datasets.
+- zfs-autobackup's snapshots show up in the UI like any other
+- Periodic snapshot tasks by TrueNAS on the same datasets are fine, each tool only thins its own naming scheme.
+- The newest zfs-autobackup snapshot on each side carries a hold to protect the last common snapshot between the source and target; deleting it in the UI fails with "dataset is busy".
+- The compose file passes `--exclude-received`, which tells zfs-autobackup to ignore datasets where the `autobackup:` property was received and only use the ones where it was set locally. The reason: when ZFS replicates a dataset it copies its properties too, including `autobackup:<name>=true`. A copy that a TrueNAS replication task makes of a dataset you selected for zfs-autobackup (e.g. `tank/photos` → `backuppool/photos`) would otherwise be marked for backup as well; zfs-autobackup would snapshot and hold the copy, and the TrueNAS replication task that owns it can then fail with "dataset is busy" as soon as it has to remove a snapshot that is held (its retention pruning the copy, or a rollback before an incremental receive). The same would happen when another machine running zfs-autobackup with the same backup name is replicated into this TrueNAS. With the flag, both cases just work.
+</details>
 
 
 <details>
