@@ -6,7 +6,7 @@ Features:
 - [x] SSH agent forwarding
 - [x] SSH config with 48h connection persistence
 - [x] Known hosts file, no `--strict-host-key-checking=no`
-- [x] Based on `debian:trixie-slim`, ZFS userland kept at or below the hosts it runs on (see [Versions](#versions))
+- [x] Based on `debian:trixie-slim`, OpenZFS 2.3 userland (see [Versions](#versions))
 - [x] GitHub Action to build and push the image to ghcr.io
 - [x] Version pinning for `zfs-autobackup`
 - [x] Pre-release channel
@@ -198,32 +198,30 @@ docker run --rm --cap-drop ALL --cap-add SYS_ADMIN --security-opt no-new-privile
 
 ## Versions
 
-The image ships the `zfs` userland from its base image, but the ZFS work is done by the **host's** kernel module, which the userland drives over `/dev/zfs`. The two do not have to match exactly, but the direction matters:
+The image uses the ZFS userland from its base image, while all ZFS operations are handled by the host's kernel module, which the userland drives over `/dev/zfs`. The versions do not need to match exactly, but compatibility is asymmetric:
 
-- **Userland older than the host module: safe.** ioctl numbers are append-only and keys the module gained later are optional, so an older userland simply does not ask for them.
-- **Userland newer than the host module: risky.** The module validates ioctl arguments against an allow-list of keys it knows and rejects the rest, which surfaces as `zfs send` failing with `invalid argument` ([openzfs/zfs#17323](https://github.com/openzfs/zfs/issues/17323)).
+- **Userland ≤ host module: safe.** Older userland simply does not use newer ioctl fields.
+- **Userland > host module: potentially incompatible.** Newer userland may send ioctl fields the older module does not recognize, causing commands such as zfs send to fail with invalid argument ([openzfs/zfs#17323](https://github.com/openzfs/zfs/issues/17323)).
 
-So the base is chosen to keep the userland at or below the hosts this runs on. `debian:trixie-slim` ships OpenZFS 2.3:
+
+For this reason, the image deliberately uses a ZFS userland version that is no newer than the hosts it targets. `debian:trixie-slim` currently provides OpenZFS 2.3:
 
 | OS | OpenZFS |
 | --- | --- |
 | **`debian:trixie-slim`** (this image) | **2.3.9** |
 | Debian 12 (bookworm) | 2.1.11 |
-| Debian 13 (trixie) | 2.3.9 |
-| Ubuntu 24.04 LTS | 2.2.2 |
 | Ubuntu 26.04 LTS | 2.4.1 |
+| Ubuntu 24.04 LTS | 2.2.2 |
 | TrueNAS 25.04, 25.10 | 2.3.x |
 | Alpine 3.22 | 2.3.9 |
 
-The entrypoint compares both versions on start and warns when the userland is ahead:
+The entrypoint compares both versions on startup and warns if the container userland is newer than the host module.
 
-```
-[entrypoint] warning: zfs userland 2.3 is newer than the host module 2.2, zfs send may fail with 'invalid argument'
-```
+Debian keeps its ZFS version fixed for the lifetime of a release, so weekly image rebuilds pick up security updates without unexpectedly changing the ZFS userland.
 
-Because Debian freezes the ZFS version for the life of a release, the weekly rebuild picks up security updates without ever moving the userland; that only happens with a deliberate base bump here.
+One minor limitation of older userland is that `zfs send -p` cannot send properties it does not know. For example, on an OpenZFS 2.4 host this image omits `defaultuserquota` and `defaultgroupquota`. File data is unaffected, and user properties such as `autobackup:<name>` are always sent.
 
-One consequence of running an older userland: zfs-autobackup sends properties by default (`zfs send -p`), and OpenZFS elides properties the sending userland does not know rather than failing. Against a 2.4 host this image omits `defaultuserquota` and `defaultgroupquota`. File data is never affected, and user properties such as `autobackup:<name>` always travel.
+If you have a different version requirement to what this image provides, please open an issue.
 
 ## Build
 To manually build the image, run the following command:
