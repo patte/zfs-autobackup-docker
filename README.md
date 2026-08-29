@@ -6,7 +6,7 @@ Features:
 - [x] SSH agent forwarding
 - [x] SSH config with 48h connection persistence
 - [x] Known hosts file, no `--strict-host-key-checking=no`
-- [x] Based on `ubuntu:26.04`
+- [x] Based on `debian:trixie-slim`, OpenZFS 2.3 userland (see [Versions](#versions))
 - [x] GitHub Action to build and push the image to ghcr.io
 - [x] Version pinning for `zfs-autobackup`
 - [x] Pre-release channel
@@ -25,7 +25,7 @@ Tags:
 - `pre`: latest pre-release (equals `latest` when no pre-release is newer than stable)
 - `4.0rc1` (etc.): pinned pre-release
 
-New releases on PyPI are picked up and published by a daily check. The current stable and pre tags are rebuilt weekly so the Ubuntu base and apt packages stay fresh; older version tags stay at their last build.
+New releases on PyPI are picked up and published by a daily check. The current stable and pre tags are rebuilt weekly so the Debian base and apt packages stay fresh; older version tags stay at their last build.
 
 When a tag moves to a new image, the old image stays pullable by digest for 90 days and is then deleted. So pinning by digest gives you an immutable image, but only for 90 days after its build.
 
@@ -195,6 +195,33 @@ docker run --rm --cap-drop ALL --cap-add SYS_ADMIN --security-opt no-new-privile
   ghcr.io/patte/zfs-autobackup:3 -v --ssh-target user@HOST --strip-path=1 offsite backupPool/truenas
 ```
 </details>
+
+## Versions
+
+The image uses the ZFS userland from its base image, while all ZFS operations are handled by the host's kernel module, which the userland drives over `/dev/zfs`. The versions do not need to match exactly, but compatibility is asymmetric:
+
+- **Userland ≤ host module: safe.** Older userland simply does not use newer ioctl fields.
+- **Userland > host module: potentially incompatible.** Newer userland may send ioctl fields the older module does not recognize, causing commands such as zfs send to fail with invalid argument ([openzfs/zfs#17323](https://github.com/openzfs/zfs/issues/17323)).
+
+
+For this reason, the image deliberately uses a ZFS userland version that is no newer than the hosts it targets. `debian:trixie-slim` currently provides OpenZFS 2.3:
+
+| OS | OpenZFS |
+| --- | --- |
+| **`debian:trixie-slim`** (this image) | **2.3.x** |
+| Debian 12 (bookworm) | 2.1.11 |
+| Ubuntu 26.04 LTS | 2.4.1 |
+| Ubuntu 24.04 LTS | 2.2.2 |
+| TrueNAS 25.04, 25.10 | 2.3.x |
+| Alpine 3.22 | 2.3.9 |
+
+The entrypoint compares both versions on startup and warns if the container userland is newer than the host module.
+
+Debian stays on the same OpenZFS release line for the lifetime of a release, so weekly image rebuilds pick up point and security updates without unexpectedly changing the ZFS userland.
+
+One minor limitation of older userland is that `zfs send -p` cannot send properties it does not know. For example, on an OpenZFS 2.4 host this image omits `defaultuserquota` and `defaultgroupquota`. File data is unaffected, and user properties such as `autobackup:<name>` are always sent.
+
+If you have a different version requirement to what this image provides, please open an issue.
 
 ## Build
 To manually build the image, run the following command:

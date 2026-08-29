@@ -1,11 +1,12 @@
-FROM ubuntu:26.04
+FROM debian:trixie-slim
 
-# Install required packages
-RUN apt-get update && apt-get install -y \
+# zfsutils-linux is in contrib. --no-install-recommends: python3-pip and friends
+# otherwise pull build-essential and a full gcc toolchain that nothing here needs.
+RUN sed -i 's/^Components: main$/Components: main contrib/' /etc/apt/sources.list.d/debian.sources \
+  && apt-get update && apt-get install -y --no-install-recommends \
   mbuffer \
   zfsutils-linux \
-  python3-pip \
-  pipx \
+  python3-venv \
   netcat-openbsd \
   openssh-client \
   procps \
@@ -32,11 +33,14 @@ RUN arch="${TARGETARCH:-$(dpkg --print-architecture)}" \
 # Install zfs-autobackup. ZAB_SPEC takes any pip install spec:
 # a pinned version (zfs-autobackup==3.3), a pre-release (zfs-autobackup==4.0rc1),
 # or an archive URL (https://github.com/psy0rz/zfs_autobackup/archive/refs/heads/master.tar.gz)
+# pip is removed afterwards, the venv is only ever built here.
 ARG ZAB_SPEC="zfs-autobackup"
-RUN pipx install "$ZAB_SPEC"
+RUN python3 -m venv /opt/zab \
+  && /opt/zab/bin/pip install --no-cache-dir "$ZAB_SPEC" \
+  && rm -rf /opt/zab/lib/python3*/site-packages/pip* /opt/zab/bin/pip*
 
-# Set the PATH so pipx-installed apps are found
-ENV PATH="/root/.local/bin:$PATH"
+# Set the PATH so the venv's apps are found
+ENV PATH="/opt/zab/bin:$PATH"
 
 # SSH config: keep connections alive and reuse one connection (see ssh.config)
 COPY ssh.config /root/.ssh/config
