@@ -108,6 +108,22 @@ check_log "wrapper: backup over ssh" "$tmp/wrapper.log" "All operations complete
 check "wrapper: snapshot arrived on the ssh target" test -n "$(last_snapshot "$pool/sshreplica/src")"
 ssh-agent -k >/dev/null; unset SSH_AGENT_PID SSH_AUTH_SOCK
 
+# --- zfs version guard ----------------------------------------------------------
+echo "### zfs version guard"
+zfs_stub() { # zfs_stub <quoted stub lines>: run the entrypoint against a fake "zfs version"
+  docker run --rm "${flags[@]}" --entrypoint /bin/bash "$image" -c \
+    "printf '%s\n' '#!/bin/bash' $1 > /usr/local/bin/zfs; chmod +x /usr/local/bin/zfs; /entrypoint.sh --version" 2>&1
+}
+
+out=$(zfs_stub "'echo zfs-2.3.9-1' 'echo zfs-kmod-2.2.2-1'")
+check "warns when the userland is newer than the host module" grep -q "warning: zfs userland 2.3 is newer than the host module 2.2" <<<"$out"
+
+out=$(zfs_stub "'echo zfs-2.3.9-1' 'echo zfs-kmod-2.4.1-1'")
+check "quiet when the userland is older than the host module" test 0 -eq "$(grep -c 'warning: zfs userland' <<<"$out")"
+
+out=$(zfs_stub "'exit 1'")
+check "runs anyway when zfs version is unavailable" grep -q "zfs-autobackup v" <<<"$out"
+
 # --- service mode ------------------------------------------------------------------
 echo "### service mode"
 container_rm zab-args
