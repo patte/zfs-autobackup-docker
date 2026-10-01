@@ -104,9 +104,48 @@ eval "$(ssh-agent -s)" >/dev/null; ssh-add "$key" 2>/dev/null
 write
 ( cd "$tmp" && ENGINE=docker IMAGE="$image" DOCKER_ARGS="--add-host $gw:host-gateway" \
   "$repo/zfs-autobackup" -v --ssh-target "root@$gw" --strip-path=1 --exclude-received zabtest "$pool/sshreplica" ) >"$tmp/wrapper.log" 2>&1
+check_log "wrapper: ./known_hosts takes precedence over ~/.ssh" "$tmp/wrapper.log" "using ./known_hosts"
 check_log "wrapper: backup over ssh" "$tmp/wrapper.log" "All operations completed successfully"
 check "wrapper: snapshot arrived on the ssh target" test -n "$(last_snapshot "$pool/sshreplica/src")"
 ssh-agent -k >/dev/null; unset SSH_AGENT_PID SSH_AUTH_SOCK
+
+echo "### one-shot mode via wrapper script with the default ~/.ssh, no agent"
+# like a user's ~/.ssh: not owned by root, own config with an Include, a host alias and
+# sockets that don't exist in the container
+sshdir=$tmp/home/.ssh; mkdir -p "$sshdir/config.d" "$tmp/nokh"
+cp "$key" "$sshdir/zabkey"; cp "$tmp/known_hosts" "$sshdir/known_hosts"
+printf 'Include config.d/*\nIdentityAgent /nonexistent/agent.sock\nControlPath /nonexistent/%%C\n' > "$sshdir/config"
+printf 'Host zabtarget\n    HostName %s\n    User root\n    IdentityFile ~/.ssh/zabkey\n' "$gw" > "$sshdir/config.d/zabtarget"
+chown -R 1000:1000 "$sshdir"; chmod -R go-rwx "$sshdir"
+ln -s /nonexistent/elsewhere "$sshdir/dangling"
+before=$(last_snapshot "$pool/sshreplica/src")
+write
+( cd "$tmp/nokh" && HOME="$tmp/home" ENGINE=docker IMAGE="$image" DOCKER_ARGS="--add-host $gw:host-gateway" \
+  "$repo/zfs-autobackup" -v --ssh-target zabtarget --strip-path=1 --exclude-received zabtest "$pool/sshreplica" ) >"$tmp/sshdir.log" 2>&1
+check_log "wrapper ~/.ssh: uses the ssh dir" "$tmp/sshdir.log" "using ssh dir $sshdir"
+check_log "wrapper ~/.ssh: backup over ssh" "$tmp/sshdir.log" "All operations completed successfully"
+check "wrapper ~/.ssh: snapshot arrived on the ssh target" test "$(last_snapshot "$pool/sshreplica/src")" != "$before"
+check "wrapper ~/.ssh: no known_hosts left in the working directory" test ! -e "$tmp/nokh/known_hosts"
+check_log "wrapper ~/.ssh: warns about a symlink pointing outside" "$tmp/sshdir.log" "warning: skipping dangling"
+
+# zfs-autobackup --version exits 255
+out=$(docker run --rm "${flags[@]}" --cap-add DAC_OVERRIDE -v "$sshdir:/ssh-host:ro" --entrypoint /bin/bash "$image" \
+  -c '/entrypoint.sh --version >/dev/null; ssh -G zabtarget')
+check "ssh dir: image's connection sharing wins" grep -q "^controlpath /root/.ssh/cm-" <<<"$out"
+check "ssh dir: forwarded agent wins" grep -qi "^identityagent ssh_auth_sock" <<<"$out"
+
+out=$(docker run --rm "${flags[@]}" --cap-add DAC_OVERRIDE -v "$sshdir:/ssh-host:ro" --entrypoint /bin/bash "$image" \
+  -c '/entrypoint.sh --version >/dev/null 2>&1; /entrypoint.sh --version >/dev/null 2>&1; grep -c "^Include" /root/.ssh/config')
+check "ssh dir: config is rebuilt, not appended to, on a restart" test "$out" = 1
+
+out=$(docker run --rm "${flags[@]}" --cap-add DAC_OVERRIDE -v "$sshdir:/ssh-host:ro" \
+  -v "$tmp/known_hosts:/root/.ssh/known_hosts:ro" "$image" --version 2>&1)
+check "ssh dir: a file mounted into /root/.ssh directly is kept" grep -q "keeping the mounted /root/.ssh/known_hosts" <<<"$out"
+check "ssh dir: and the run goes on" grep -q "zfs-autobackup v" <<<"$out"
+
+out=$(docker run --rm "${flags[@]}" -v "$sshdir:/ssh-host:ro" "$image" --version 2>&1); rc=$?
+check "ssh dir: unreadable without DAC_OVERRIDE fails (rc $rc)" test "$rc" -eq 1
+check "ssh dir: and says why" grep -q "error: cannot read /ssh-host" <<<"$out"
 
 # --- zfs version guard ----------------------------------------------------------
 echo "### zfs version guard"
