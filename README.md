@@ -85,10 +85,10 @@ sudo podman run --rm \
   -v ~/.ssh:/ssh-host:ro \
   ghcr.io/patte/zfs-autobackup:latest --help
 ```
-To use just a known_hosts file:
+To only use a known_hosts file:
 ```diff
---v ~/.ssh:/ssh-host:ro
-+-v ./known_hosts:/root/.ssh/known_hosts:ro
+- -v ~/.ssh:/ssh-host:ro
++ -v ./known_hosts:/root/.ssh/known_hosts:ro
 ```
 See the sections above about SSH configuration and known_hosts handling.
 
