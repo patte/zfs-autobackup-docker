@@ -3,9 +3,11 @@
 A batteries included docker image for running [zfs-autobackup](https://github.com/psy0rz/zfs_autobackup).
 
 Features:
+- [x] Wrapper script that works like native `zfs-autobackup`
 - [x] SSH agent forwarding
+- [x] Use your `~/.ssh` (keys, known_hosts, config), or just a known_hosts file
 - [x] SSH config with 48h connection persistence
-- [x] Known hosts file, no `--strict-host-key-checking=no`
+- [x] Host key checking, no `--strict-host-key-checking=no`
 - [x] Based on `debian:trixie-slim`, OpenZFS 2.3 userland (see [Versions](#versions))
 - [x] GitHub Action to build and push the image to ghcr.io
 - [x] Version pinning for `zfs-autobackup`
@@ -31,12 +33,48 @@ When a tag moves to a new image, the old image stays pullable by digest for 90 d
 
 ## Usage
 
-First create a `known_hosts` file for the servers you want to connect to. This will be bind mounted into the container.
+### Wrapper script
+
+The easiest way: run [`./zfs-autobackup`](./zfs-autobackup), which starts the container using podman or docker (whichever is available).
+```bash
+./zfs-autobackup --version
+```
+
+Just run `./zfs-autobackup` like you would run the native `zfs-autobackup` e.g.:
+```bash
+./zfs-autobackup -v --ssh-target user@HOST --strip-path=1 --keep-source=10 --keep-target=10 HOST backupPool
+```
+
+Don't run it with `sudo`: the wrapper calls `sudo` itself, and needs your `HOME` and `SSH_AUTH_SOCK` to find your `~/.ssh` and ssh agent.
+
+#### `known_hosts` only
+
+If a `./known_hosts` file exists in the current directory, the wrapper script mounts it into the container. To create one run
 ```bash
 ssh-keyscan HOST >> known_hosts
 ```
 
-Then run the container with the following command.
+#### Host `~/.ssh`
+
+If no `./known_hosts` file exists the wrapper uses your host's ssh setup: it copies `~/.ssh` into the container. If `ssh user@HOST` works for you, `zfs-autobackup --ssh-target user@HOST` works too. The host key has to be in your known_hosts already, so connect with ssh once first.
+
+`~/.ssh` is mounted read-only and copied, nothing is written back to it. Mind this:
+- Paths must be relative to the home directory (e.g. `IdentityFile ~/.ssh/id_ed25519`). Absolute host paths and symlinks pointing outside `~/.ssh` don't exist in the container and are skipped with a warning. If you need them, adapt `./zfs-autobackup` to your needs.
+- Your config is read by the container's ssh (Debian's OpenSSH), which refuses to run when it sees an option it doesn't know, e.g. macOS' `UseKeychain` or options of a newer OpenSSH. Put `IgnoreUnknown UseKeychain` above such an option.
+- The image's agent and connection sharing settings ([`ssh.config`](./ssh.config)) take precedence over yours, since your host's sockets don't exist in the container.
+
+Set `SSH_DIR=/path/to/dir` to use another ssh dir instead of `~/.ssh`. An explicitly set `SSH_DIR` takes precedence over `./known_hosts`, `SSH_DIR=` uses no ssh dir at all.
+
+#### Other options
+
+To use the pre-release channel (or any published tag), set `TAG`:
+```bash
+TAG=pre ./zfs-autobackup --version
+```
+
+### Direct container run
+
+What the wrapper does, by hand:
 ```bash
 sudo podman run --rm \
   --cap-drop ALL --cap-add SYS_ADMIN --cap-add DAC_OVERRIDE \
@@ -44,25 +82,17 @@ sudo podman run --rm \
   --device /dev/zfs \
   --env SSH_AUTH_SOCK=$SSH_AUTH_SOCK \
   -v $SSH_AUTH_SOCK:$SSH_AUTH_SOCK \
-  -v ./known_hosts:/root/.ssh/known_hosts \
+  -v ~/.ssh:/ssh-host:ro \
   ghcr.io/patte/zfs-autobackup:latest --help
 ```
-_ZFS inside the container needs `CAP_SYS_ADMIN` and `/dev/zfs`; `DAC_OVERRIDE` lets root in the container use your user's ssh-agent socket (can be dropped if you mount a key file instead)._
-
-Or just run the script [`zfs-autobackup`](./zfs-autobackup), which does the same thing (using podman or docker, whichever is available).
-```bash
-./zfs-autobackup --version
+To use just a known_hosts file:
+```diff
+--v ~/.ssh:/ssh-host:ro
++-v ./known_hosts:/root/.ssh/known_hosts:ro
 ```
+See the sections above about SSH configuration and known_hosts handling.
 
-Just run `./zfs-autobackup` where you would run `zfs-autobackup` e.g.:
-```bash
-./zfs-autobackup -v --ssh-target user@HOST --strip-path=1 --keep-source=10 --keep-target=10 HOST backupPool
-```
-
-To use the pre-release channel (or any published tag), set `TAG`:
-```bash
-TAG=pre ./zfs-autobackup --version
-```
+_ZFS inside the container needs `CAP_SYS_ADMIN` and `/dev/zfs`; `DAC_OVERRIDE` lets root in the container use your user's ssh-agent socket and read your `~/.ssh` (can be dropped if you mount root-owned key files instead)._
 
 ### Service mode (cron schedule)
 
@@ -116,7 +146,7 @@ ssh-keyscan HOST >> ssh/known_hosts
 
 Mount both read-only as in the example above. Add `ssh/id_ed25519.pub` to `~/.ssh/authorized_keys` on the target. The key has the same power there as the user it logs in as, so prefer a dedicated user with [`zfs allow` permissions](https://github.com/psy0rz/zfs_autobackup/wiki/Manual#running-without-root) over root.
 
-For ports, jump hosts etc. mount your own ssh config to `/root/.ssh/config`. Start from [`ssh.config`](./ssh.config), so the connection sharing settings stay, and add a `Host` block to it.
+For ports, jump hosts etc. mount a dir containing your ssh `config` (and keys, `known_hosts`) to `/ssh-host`: it's copied to `/root/.ssh` and the config is appended to the image's [`ssh.config`](./ssh.config). Or mount your own ssh config to `/root/.ssh/config`; start from [`ssh.config`](./ssh.config), so the connection sharing settings stay, and add a `Host` block to it.
 
 #### Noticing failures
 

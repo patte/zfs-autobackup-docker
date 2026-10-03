@@ -37,6 +37,42 @@ check_zfs_versions() {
 
 check_zfs_versions
 
+# An ssh dir mounted at /ssh-host (SSH_DIR of the wrapper script) is copied to /root/.ssh
+# This is necessary because ssh requires its config to be owned by root and we want to
+# write in our config options without editing the users own ssh config.
+# Our config options win over the user's config as e.g. the user's agent socket doesn't exist in the container.
+# Files mounted into /root/.ssh directly take precedence over the ssh dir.
+import_ssh_dir() {
+  local src=/ssh-host dst=/root/.ssh p skip="" marker="# ---- appended from the ssh dir by entrypoint.sh ----"
+  [[ -d $src ]] || return 0
+  if [[ ! -r $src || ! -x $src ]]; then
+    log "error: cannot read $src, add --cap-add DAC_OVERRIDE when it's owned by another user"
+    exit 1
+  fi
+  while IFS= read -r -d '' p; do
+    if [[ -n $skip && $p == "$skip"/* ]]; then
+      continue
+    elif [[ ! -e $src/$p ]]; then
+      log "warning: skipping $p, its symlink target doesn't exist in the container"
+    elif mountpoint -q "$dst/$p"; then
+      log "keeping the mounted $dst/$p, skipping $p of the ssh dir"
+      # find lists a dir before its content
+      [[ -d $dst/$p ]] && skip=$p
+    elif [[ -d $src/$p ]]; then
+      install -d -m 700 "$dst/$p"
+    elif [[ $p == config ]]; then
+      # everything above the marker is the image's config, so a restart replaces rather than appends
+      { awk -v m="$marker" '$0 == m { exit } { print }' "$dst/config"; echo "$marker"; cat "$src/config"; } > "$dst/config.new"
+      chmod 600 "$dst/config.new"
+      mv "$dst/config.new" "$dst/config"
+    else
+      install -m 600 "$src/$p" "$dst/$p"
+    fi
+  done < <(cd "$src" && find -L . -mindepth 1 \( -type d -o -type f -o -type l \) -printf '%P\0')
+}
+
+import_ssh_dir
+
 if [[ -z "${CRON_SCHEDULE:-}" ]]; then
   exec zfs-autobackup "$@"
 fi

@@ -23,8 +23,22 @@ args=(
   --cap-drop ALL --cap-add SYS_ADMIN --cap-add DAC_OVERRIDE
   --security-opt no-new-privileges=true
   --device /dev/zfs
-  -v ./known_hosts:/root/.ssh/known_hosts
 )
+
+# SSH_DIR: an ssh dir providing keys, known_hosts and config, ~/.ssh by default.
+# If unset an existing ./known_hosts file is used instead
+# SSH_DIR= forces no ssh dir.
+if [[ -z ${SSH_DIR+set} && ! -f known_hosts && -d ~/.ssh ]]; then
+  SSH_DIR=~/.ssh
+fi
+if [[ -n "${SSH_DIR:-}" ]]; then
+  ssh_dir=$(cd "$SSH_DIR" && pwd)
+  args+=(-v "$ssh_dir:/ssh-host:ro")
+  echo "[wrapper] using ssh dir $ssh_dir" >&2
+elif [[ -f known_hosts ]]; then
+  args+=(-v ./known_hosts:/root/.ssh/known_hosts)
+  echo "[wrapper] using ./known_hosts" >&2
+fi
 
 if [[ -n "${SSH_AUTH_SOCK:-}" ]]; then
   args+=(--env "SSH_AUTH_SOCK=$SSH_AUTH_SOCK" -v "$SSH_AUTH_SOCK:$SSH_AUTH_SOCK")
