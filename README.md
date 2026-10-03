@@ -60,6 +60,7 @@ If no `./known_hosts` file exists the wrapper uses your host's ssh setup: it cop
 
 `~/.ssh` is mounted read-only and copied, nothing is written back to it. Mind this:
 - Paths must be relative to the home directory (e.g. `IdentityFile ~/.ssh/id_ed25519`). Absolute host paths and symlinks pointing outside `~/.ssh` don't exist in the container and are skipped with a warning. If you need them, adapt `./zfs-autobackup` to your needs.
+- Your config is read by the container's ssh (Debian's OpenSSH), which refuses to run when it sees an option it doesn't know, e.g. macOS' `UseKeychain` or options of a newer OpenSSH. Put `IgnoreUnknown UseKeychain` above such an option.
 - The image's agent and connection sharing settings ([`ssh.config`](./ssh.config)) take precedence over yours, since your host's sockets don't exist in the container.
 
 Set `SSH_DIR=/path/to/dir` to use another ssh dir instead of `~/.ssh`. An explicitly set `SSH_DIR` takes precedence over `./known_hosts`, `SSH_DIR=` uses no ssh dir at all.

@@ -38,22 +38,26 @@ check_zfs_versions() {
 check_zfs_versions
 
 # An ssh dir mounted at /ssh-host (SSH_DIR of the wrapper script) is copied to /root/.ssh
-# This is necessary because ssh requires its config to be owned by root and we want to 
+# This is necessary because ssh requires its config to be owned by root and we want to
 # write in our config options without editing the users own ssh config.
 # Our config options win over the user's config as e.g. the user's agent socket doesn't exist in the container.
 # Files mounted into /root/.ssh directly take precedence over the ssh dir.
 import_ssh_dir() {
-  local src=/ssh-host dst=/root/.ssh p marker="# ---- appended from the ssh dir by entrypoint.sh ----"
+  local src=/ssh-host dst=/root/.ssh p skip="" marker="# ---- appended from the ssh dir by entrypoint.sh ----"
   [[ -d $src ]] || return 0
   if [[ ! -r $src || ! -x $src ]]; then
     log "error: cannot read $src, add --cap-add DAC_OVERRIDE when it's owned by another user"
     exit 1
   fi
   while IFS= read -r -d '' p; do
-    if [[ ! -e $src/$p ]]; then
-      log "warning: skipping $p, its symlink target is outside the ssh dir"
+    if [[ -n $skip && $p == "$skip"/* ]]; then
+      continue
+    elif [[ ! -e $src/$p ]]; then
+      log "warning: skipping $p, its symlink target doesn't exist in the container"
     elif mountpoint -q "$dst/$p"; then
       log "keeping the mounted $dst/$p, skipping $p of the ssh dir"
+      # find lists a dir before its content
+      [[ -d $dst/$p ]] && skip=$p
     elif [[ -d $src/$p ]]; then
       install -d -m 700 "$dst/$p"
     elif [[ $p == config ]]; then

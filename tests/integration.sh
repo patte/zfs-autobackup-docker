@@ -128,6 +128,15 @@ check "wrapper ~/.ssh: snapshot arrived on the ssh target" test "$(last_snapshot
 check "wrapper ~/.ssh: no known_hosts left in the working directory" test ! -e "$tmp/nokh/known_hosts"
 check_log "wrapper ~/.ssh: warns about a symlink pointing outside" "$tmp/sshdir.log" "warning: skipping dangling"
 
+wrapper() { ENGINE=docker IMAGE="$image" HOME="$tmp/home" "$repo/zfs-autobackup" --version 2>&1; }
+out=$(cd "$tmp" && SSH_DIR="$sshdir" wrapper)
+check "wrapper: an explicit SSH_DIR takes precedence over ./known_hosts" grep -q "using ssh dir $sshdir" <<<"$out"
+out=$(cd "$tmp/nokh" && SSH_DIR="" wrapper)
+check "wrapper: SSH_DIR= uses no ssh dir" test -z "$(grep -F "[wrapper] using" <<<"$out")"
+mkdir -p "$tmp/khdir/known_hosts"
+out=$(cd "$tmp/khdir" && wrapper)
+check "wrapper: a ./known_hosts dir is not used as known_hosts file" grep -q "using ssh dir $sshdir" <<<"$out"
+
 # zfs-autobackup --version exits 255
 out=$(docker run --rm "${flags[@]}" --cap-add DAC_OVERRIDE -v "$sshdir:/ssh-host:ro" --entrypoint /bin/bash "$image" \
   -c '/entrypoint.sh --version >/dev/null; ssh -G zabtarget')
@@ -142,6 +151,12 @@ out=$(docker run --rm "${flags[@]}" --cap-add DAC_OVERRIDE -v "$sshdir:/ssh-host
   -v "$tmp/known_hosts:/root/.ssh/known_hosts:ro" "$image" --version 2>&1)
 check "ssh dir: a file mounted into /root/.ssh directly is kept" grep -q "keeping the mounted /root/.ssh/known_hosts" <<<"$out"
 check "ssh dir: and the run goes on" grep -q "zfs-autobackup v" <<<"$out"
+
+mkdir -p "$tmp/mounted"
+out=$(docker run --rm "${flags[@]}" --cap-add DAC_OVERRIDE -v "$sshdir:/ssh-host:ro" \
+  -v "$tmp/mounted:/root/.ssh/config.d:ro" "$image" --version 2>&1)
+check "ssh dir: a dir mounted into /root/.ssh directly is kept" grep -q "keeping the mounted /root/.ssh/config.d" <<<"$out"
+check "ssh dir: and nothing is copied into it" grep -q "zfs-autobackup v" <<<"$out"
 
 out=$(docker run --rm "${flags[@]}" -v "$sshdir:/ssh-host:ro" "$image" --version 2>&1); rc=$?
 check "ssh dir: unreadable without DAC_OVERRIDE fails (rc $rc)" test "$rc" -eq 1
