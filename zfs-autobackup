@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Runs zfs-autobackup in a container (podman or docker)
+# https://github.com/patte/zfs-autobackup-docker
 set -euo pipefail
 
 # Prefer podman, fall back to docker; ENGINE overrides the choice

@@ -36,6 +36,16 @@ When a tag moves to a new image, the old image stays pullable by digest for 90 d
 ### Wrapper script
 
 The easiest way: run [`./zfs-autobackup`](./zfs-autobackup), which starts the container using podman or docker (whichever is available).
+
+Download:
+```bash
+curl -fsSLO https://raw.githubusercontent.com/patte/zfs-autobackup-docker/main/zfs-autobackup
+chmod +x zfs-autobackup
+# optional: put it on your APTH e.g.
+# mv zfs-autobackup ~/.local/bin/
+```
+
+Check that it works:
 ```bash
 ./zfs-autobackup --version
 ```
